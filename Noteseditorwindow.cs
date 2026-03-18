@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -17,7 +18,8 @@ namespace EditorTools
         {
             public string text = "";
             public bool completed;
-            public int priority; // 0=default, 1=light blue, 2=light green, 3=yellow, 4=red
+            public int priority;   // 0=default, 1=light blue, 2=light green, 3=yellow, 4=red
+            public int sortOrder;  // sub-order within same priority
         }
 
         [Serializable]
@@ -39,7 +41,7 @@ namespace EditorTools
         // ── Constants ────────────────────────────────────────────────
         private const string EditorPrefsKey = "EditorTools_NotesData";
         private const float PriorityBoxWidth = 26f;
-        private const float CheckboxWidth = 18f;
+        private const float CheckboxWidth = 28f;
         private const float DeleteBtnWidth = 20f;
 
         private static readonly Color[] PriorityColors = new Color[]
@@ -51,6 +53,27 @@ namespace EditorTools
             new Color(0.9f, 0.3f, 0.3f, 1f),    // 4: red
         };
 
+        // ── File Paths ───────────────────────────────────────────────
+        private static string ScriptFolder
+        {
+            get
+            {
+                // Find where this script lives
+                string[] guids = AssetDatabase.FindAssets("t:MonoScript NotesEditorWindow");
+                if (guids.Length > 0)
+                {
+                    string scriptPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+                    return Path.GetDirectoryName(scriptPath);
+                }
+                return "Assets/Editor";
+            }
+        }
+
+        private static string SaveTxtPath => Path.Combine(ScriptFolder, "ProjectPlannerSaveText.txt");
+        private static string SaveJsonPath => Path.Combine(ScriptFolder, "ProjectPlannerSaveJSON.json");
+        private static string ImportTxtFolder => Path.Combine(ScriptFolder, "ProjectPlannerImport", "txt");
+        private static string ImportJsonFolder => Path.Combine(ScriptFolder, "ProjectPlannerImport", "json");
+
         // ── State ────────────────────────────────────────────────────
         private NotesData _data;
         private Vector2 _scrollPos;
@@ -58,9 +81,8 @@ namespace EditorTools
         private string _searchFilter = "";
         private readonly Dictionary<string, string> _newItemText = new Dictionary<string, string>();
 
-        // Drag state
-        private TodoItem _dragItem;
-        private int _dragSourceCatIndex = -1;
+        // Category drag state
+        private int _dragCatIndex = -1;
 
         // Styles
         private GUIStyle _completedFieldStyle;
@@ -70,15 +92,21 @@ namespace EditorTools
         private bool _stylesInitialized;
 
         // ── Menu Entry ───────────────────────────────────────────────
-        [MenuItem("Window/General/Notes and To-Do")]
+        [MenuItem("Window/General/Project Planner")]
         public static void ShowWindow()
         {
-            var window = GetWindow<NotesEditorWindow>("Notes & To-Do");
+            var window = GetWindow<NotesEditorWindow>("Project Planner");
             window.minSize = new Vector2(320, 250);
         }
 
         // ── Lifecycle ────────────────────────────────────────────────
-        private void OnEnable() => Load();
+        private void OnEnable()
+        {
+            Load();
+            EnsureImportFolders();
+            ProcessImportFolders();
+        }
+
         private void OnDisable() => Save();
 
         // ── Style Init ───────────────────────────────────────────────
@@ -131,9 +159,8 @@ namespace EditorTools
 
             EditorGUILayout.EndScrollView();
 
-            // Release drag on mouse up anywhere
-            if (Event.current.type == EventType.MouseUp)
-                ClearDrag();
+            if (Event.current.type == EventType.MouseUp && _dragCatIndex >= 0)
+                _dragCatIndex = -1;
         }
 
         // ── Toolbar ──────────────────────────────────────────────────
@@ -141,9 +168,10 @@ namespace EditorTools
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
-            GUILayout.Label("Notes & To-Do", _headerStyle);
+            GUILayout.Label("Project Planner", _headerStyle);
             GUILayout.FlexibleSpace();
 
+            GUILayout.Label($"Total Categories: {_data.categories.Count}", _headerStyle);
             GUILayout.Label("Search:", EditorStyles.miniLabel, GUILayout.Width(42));
             _searchFilter = EditorGUILayout.TextField(_searchFilter, EditorStyles.toolbarSearchField,
                 GUILayout.Width(140));
@@ -166,7 +194,8 @@ namespace EditorTools
             var cat = _data.categories[index];
             string catId = index.ToString();
 
-            var activeItems = cat.items.Where(i => !i.completed).OrderByDescending(i => i.priority).ToList();
+            var activeItems = cat.items.Where(i => !i.completed)
+                .OrderByDescending(i => i.priority).ThenBy(i => i.sortOrder).ToList();
             var completedItems = cat.items.Where(i => i.completed).ToList();
 
             bool hasSearch = !string.IsNullOrWhiteSpace(_searchFilter);
@@ -186,12 +215,12 @@ namespace EditorTools
 
             cat.foldout = EditorGUILayout.Foldout(cat.foldout, "", true);
 
-            string newName = EditorGUILayout.TextField(cat.name, EditorStyles.boldLabel);
+            string newName = EditorGUILayout.TextField(cat.name, _headerStyle);
             if (newName != cat.name) { cat.name = newName; Save(); }
 
             GUILayout.FlexibleSpace();
 
-            GUILayout.Label($"{completedItems.Count}/{cat.items.Count}", EditorStyles.miniLabel);
+            GUILayout.Label($"Tasks Completed: {completedItems.Count}/{cat.items.Count}", _headerStyle);
 
             GUI.enabled = index > 0;
             if (GUILayout.Button("▲", EditorStyles.miniButtonLeft, GUILayout.Width(22)))
@@ -213,6 +242,21 @@ namespace EditorTools
 
             GUI.enabled = true;
 
+            // ── Drag handle for category ─────────────────────────────
+            if (GUILayout.Button("≡", EditorStyles.miniButtonLeft, GUILayout.Width(22)))
+            {
+                // Visual only — drag handled below
+            }
+            Rect catHandleRect = GUILayoutUtility.GetLastRect();
+            EditorGUIUtility.AddCursorRect(catHandleRect, MouseCursor.Pan);
+
+            if (Event.current.type == EventType.MouseDown
+                && catHandleRect.Contains(Event.current.mousePosition))
+            {
+                _dragCatIndex = index;
+                Event.current.Use();
+            }
+
             if (GUILayout.Button("✕", EditorStyles.miniButton, GUILayout.Width(22)))
             {
                 if (EditorUtility.DisplayDialog("Delete Category",
@@ -229,13 +273,18 @@ namespace EditorTools
 
             EditorGUILayout.EndHorizontal();
 
-            if (!cat.foldout) { EditorGUILayout.EndVertical(); return; }
+            if (!cat.foldout)
+            {
+                EditorGUILayout.EndVertical();
+                HandleCategoryDrop(index);
+                return;
+            }
 
             EditorGUI.indentLevel++;
 
-            // ── Active items (sorted by priority desc) ───────────────
+            // ── Active items ─────────────────────────────────────────
             for (int j = 0; j < filteredActive.Count; j++)
-                DrawTodoItem(cat, filteredActive[j], false, index);
+                DrawTodoItem(cat, filteredActive[j], false, filteredActive, j);
 
             DrawAddItem(cat, catId);
 
@@ -251,7 +300,6 @@ namespace EditorTools
 
                 GUILayout.FlexibleSpace();
 
-                // Clear Completed = bulk uncheck, move back to active
                 if (GUILayout.Button("Clear Completed", EditorStyles.miniButton, GUILayout.Width(110)))
                 {
                     foreach (var item in completedItems)
@@ -263,7 +311,6 @@ namespace EditorTools
                     GUIUtility.ExitGUI();
                 }
 
-                // Delete All = permanently destroy completed items
                 var oldBg = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.9f, 0.35f, 0.35f, 1f);
                 if (GUILayout.Button("Delete All", EditorStyles.miniButton, GUILayout.Width(70)))
@@ -285,7 +332,7 @@ namespace EditorTools
                 if (cat.completedFoldout)
                 {
                     foreach (var item in filteredCompleted)
-                        DrawTodoItem(cat, item, true, index);
+                        DrawTodoItem(cat, item, true, null, -1);
                 }
             }
 
@@ -298,32 +345,35 @@ namespace EditorTools
 
             EditorGUI.indentLevel--;
             EditorGUILayout.EndVertical();
+
+            HandleCategoryDrop(index);
+        }
+
+        private void HandleCategoryDrop(int index)
+        {
+            if (_dragCatIndex >= 0 && _dragCatIndex != index)
+            {
+                Rect catRect = GUILayoutUtility.GetLastRect();
+                if (catRect.Contains(Event.current.mousePosition)
+                    && Event.current.type == EventType.MouseUp)
+                {
+                    var dragged = _data.categories[_dragCatIndex];
+                    _data.categories.RemoveAt(_dragCatIndex);
+                    int insertAt = index > _dragCatIndex ? index - 1 : index;
+                    _data.categories.Insert(insertAt, dragged);
+                    _dragCatIndex = -1;
+                    Save();
+                    Event.current.Use();
+                    GUIUtility.ExitGUI();
+                }
+            }
         }
 
         // ── To-Do Item ───────────────────────────────────────────────
-        private void DrawTodoItem(Category category, TodoItem item, bool isCompletedSection, int catIndex)
+        private void DrawTodoItem(Category category, TodoItem item, bool isCompletedSection,
+            List<TodoItem> sortedList, int sortedIndex)
         {
-            Rect rowRect = EditorGUILayout.BeginHorizontal();
-
-            // ── Drag handle (active only) ────────────────────────────
-            if (!isCompletedSection)
-            {
-                var handleRect = GUILayoutUtility.GetRect(14f, 16f, GUILayout.Width(14));
-                EditorGUI.LabelField(handleRect, "≡", EditorStyles.miniLabel);
-                EditorGUIUtility.AddCursorRect(handleRect, MouseCursor.Pan);
-
-                if (Event.current.type == EventType.MouseDown
-                    && handleRect.Contains(Event.current.mousePosition))
-                {
-                    _dragItem = item;
-                    _dragSourceCatIndex = catIndex;
-                    Event.current.Use();
-                }
-            }
-            else
-            {
-                GUILayout.Space(14);
-            }
+            EditorGUILayout.BeginHorizontal();
 
             // ── Checkbox ─────────────────────────────────────────────
             bool newCompleted = EditorGUILayout.Toggle(item.completed, GUILayout.Width(CheckboxWidth));
@@ -346,17 +396,16 @@ namespace EditorTools
 
             if (!isCompletedSection)
             {
-                // Clickable — cycles 0→1→2→3→4→0
                 if (GUILayout.Button(item.priority.ToString(), EditorStyles.miniButton,
                         GUILayout.Width(PriorityBoxWidth), GUILayout.Height(16)))
                 {
                     item.priority = (item.priority + 1) % 5;
+                    NormalizeSortOrders(category);
                     Save();
                 }
             }
             else
             {
-                // Read-only display for completed items
                 GUILayout.Box(item.priority.ToString(), EditorStyles.miniButton,
                     GUILayout.Width(PriorityBoxWidth), GUILayout.Height(16));
             }
@@ -376,27 +425,64 @@ namespace EditorTools
                 GUIUtility.ExitGUI();
             }
 
-            EditorGUILayout.EndHorizontal();
-
-            // ── Drop zone for drag reorder ───────────────────────────
-            if (!isCompletedSection && _dragItem != null && _dragItem != item
-                && _dragSourceCatIndex == catIndex && _dragItem.priority == item.priority)
+            // ── Up/Down arrows (active items only) ───────────────────
+            if (!isCompletedSection && sortedList != null)
             {
-                if (rowRect.Contains(Event.current.mousePosition)
-                    && Event.current.type == EventType.MouseUp)
+                GUILayout.Space(4);
+
+                bool canMoveUp = CanMoveUpInPriority(sortedList, sortedIndex);
+                bool canMoveDown = CanMoveDownInPriority(sortedList, sortedIndex);
+
+                GUI.enabled = canMoveUp;
+                if (GUILayout.Button("▲", EditorStyles.miniButtonLeft, GUILayout.Width(18)))
                 {
-                    int fromIdx = category.items.IndexOf(_dragItem);
-                    int toIdx = category.items.IndexOf(item);
-                    if (fromIdx >= 0 && toIdx >= 0 && fromIdx != toIdx)
-                    {
-                        category.items.RemoveAt(fromIdx);
-                        toIdx = category.items.IndexOf(item);
-                        category.items.Insert(toIdx, _dragItem);
-                        Save();
-                    }
-                    ClearDrag();
-                    Event.current.Use();
+                    SwapSortOrders(sortedList[sortedIndex], sortedList[sortedIndex - 1]);
+                    Save();
+                    GUIUtility.ExitGUI();
                 }
+
+                GUI.enabled = canMoveDown;
+                if (GUILayout.Button("▼", EditorStyles.miniButtonRight, GUILayout.Width(18)))
+                {
+                    SwapSortOrders(sortedList[sortedIndex], sortedList[sortedIndex + 1]);
+                    Save();
+                    GUIUtility.ExitGUI();
+                }
+
+                GUI.enabled = true;
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private bool CanMoveUpInPriority(List<TodoItem> sorted, int index)
+        {
+            if (index <= 0) return false;
+            return sorted[index - 1].priority == sorted[index].priority;
+        }
+
+        private bool CanMoveDownInPriority(List<TodoItem> sorted, int index)
+        {
+            if (index >= sorted.Count - 1) return false;
+            return sorted[index + 1].priority == sorted[index].priority;
+        }
+
+        private void SwapSortOrders(TodoItem a, TodoItem b)
+        {
+            int temp = a.sortOrder;
+            a.sortOrder = b.sortOrder;
+            b.sortOrder = temp;
+        }
+
+        private void NormalizeSortOrders(Category category)
+        {
+            var groups = category.items.Where(i => !i.completed)
+                .GroupBy(i => i.priority);
+            foreach (var group in groups)
+            {
+                int order = 0;
+                foreach (var item in group.OrderBy(i => i.sortOrder))
+                    item.sortOrder = order++;
             }
         }
 
@@ -419,7 +505,14 @@ namespace EditorTools
 
             if ((addPressed || enterPressed) && !string.IsNullOrWhiteSpace(_newItemText[catId]))
             {
-                category.items.Add(new TodoItem { text = _newItemText[catId].Trim(), priority = 0 });
+                int maxOrder = category.items.Where(i => !i.completed && i.priority == 0)
+                    .Select(i => i.sortOrder).DefaultIfEmpty(-1).Max() + 1;
+                category.items.Add(new TodoItem
+                {
+                    text = _newItemText[catId].Trim(),
+                    priority = 0,
+                    sortOrder = maxOrder
+                });
                 _newItemText[catId] = "";
                 Save();
                 GUI.FocusControl(null);
@@ -457,12 +550,6 @@ namespace EditorTools
             Save();
         }
 
-        private void ClearDrag()
-        {
-            _dragItem = null;
-            _dragSourceCatIndex = -1;
-        }
-
         private bool MatchesSearch(string text)
         {
             return text != null && text.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0;
@@ -478,10 +565,10 @@ namespace EditorTools
                 .TrimEnd();
         }
 
-        // ── Import ────────────────────────────────────────────────
+        // ── Import (Manual via button) ───────────────────────────────
         private void ImportFile()
         {
-            string path = EditorUtility.OpenFilePanel("Import Notes & To-Do", "", "txt,json");
+            string path = EditorUtility.OpenFilePanel("Import Project Planner", "", "txt,json");
             if (string.IsNullOrEmpty(path)) return;
 
             string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -509,7 +596,95 @@ namespace EditorTools
                 return;
             }
 
-            // Merge imported categories into existing data
+            MergeImported(imported);
+
+            EditorUtility.DisplayDialog("Import",
+                $"Imported {imported.Count} category(s) from {Path.GetFileName(path)}.", "OK");
+        }
+
+        // ── Import (Auto from watch folders) ─────────────────────────
+        public void ProcessImportFolders()
+        {
+            bool anyImported = false;
+
+            anyImported |= ProcessImportFolder(ImportTxtFolder, ".txt");
+            anyImported |= ProcessImportFolder(ImportJsonFolder, ".json");
+
+            if (anyImported)
+            {
+                Save();
+                Repaint();
+            }
+        }
+
+        private bool ProcessImportFolder(string folder, string expectedExt)
+        {
+            if (!Directory.Exists(folder)) return false;
+
+            string[] files = Directory.GetFiles(folder, "*" + expectedExt);
+            if (files.Length == 0) return false;
+
+            bool anyProcessed = false;
+            List<string> errorFiles = new List<string>();
+
+            foreach (string filePath in files)
+            {
+                string content = File.ReadAllText(filePath);
+                List<Category> imported = null;
+
+                try
+                {
+                    if (expectedExt == ".json")
+                        imported = ParseJson(content);
+                    else
+                        imported = ParseTxt(content);
+                }
+                catch (Exception e)
+                {
+                    errorFiles.Add($"{Path.GetFileName(filePath)}: {e.Message}");
+                    continue;
+                }
+
+                if (imported == null || imported.Count == 0)
+                {
+                    errorFiles.Add($"{Path.GetFileName(filePath)}: No categories found. Check file format.");
+                    continue;
+                }
+
+                MergeImported(imported);
+                anyProcessed = true;
+
+                // Delete the file after successful import
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[Project Planner] Could not delete imported file {filePath}: {e.Message}");
+                }
+            }
+
+            if (errorFiles.Count > 0)
+            {
+                string errorMsg = "The following files could not be imported (incorrect format):\n\n"
+                    + string.Join("\n", errorFiles)
+                    + "\n\nThese files have been left in place so you can fix them.";
+                EditorUtility.DisplayDialog("Project Planner Import Error", errorMsg, "OK");
+            }
+
+            if (anyProcessed)
+            {
+                // Clean up .meta files for deleted imports
+                AssetDatabase.Refresh();
+            }
+
+            return anyProcessed;
+        }
+
+        // ── Merge Logic ──────────────────────────────────────────────
+        private void MergeImported(List<Category> imported)
+        {
             foreach (var importedCat in imported)
             {
                 var existing = _data.categories.Find(c =>
@@ -517,7 +692,6 @@ namespace EditorTools
 
                 if (existing != null)
                 {
-                    // Same name: append items and notes
                     existing.items.AddRange(importedCat.items);
                     if (!string.IsNullOrWhiteSpace(importedCat.notes))
                     {
@@ -529,16 +703,21 @@ namespace EditorTools
                 }
                 else
                 {
-                    // New category
                     _data.categories.Add(importedCat);
                 }
             }
 
             Save();
             Repaint();
+        }
 
-            EditorUtility.DisplayDialog("Import",
-                $"Imported {imported.Count} category(s) from {Path.GetFileName(path)}.", "OK");
+        // ── Ensure Import Folders Exist ──────────────────────────────
+        private static void EnsureImportFolders()
+        {
+            if (!Directory.Exists(ImportTxtFolder))
+                Directory.CreateDirectory(ImportTxtFolder);
+            if (!Directory.Exists(ImportJsonFolder))
+                Directory.CreateDirectory(ImportJsonFolder);
         }
 
         // ── TXT Parser ───────────────────────────────────────────────
@@ -558,15 +737,12 @@ namespace EditorTools
                 string line = lines[i];
                 string trimmed = line.Trim();
 
-                // Skip empty lines
                 if (string.IsNullOrWhiteSpace(trimmed))
                     continue;
 
-                // Check for "Category:" line (case-insensitive)
                 if (string.Equals(trimmed, "Category:", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(trimmed, "Category", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Next non-empty line is the category name
                     string catName = "";
                     for (int j = i + 1; j < lines.Length; j++)
                     {
@@ -574,7 +750,7 @@ namespace EditorTools
                         if (!string.IsNullOrWhiteSpace(next))
                         {
                             catName = next.TrimEnd(':');
-                            i = j; // advance past the name line
+                            i = j;
                             break;
                         }
                     }
@@ -588,7 +764,6 @@ namespace EditorTools
                     continue;
                 }
 
-                // Check for "Notes:" line
                 if (string.Equals(trimmed, "Notes:", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(trimmed, "Notes", StringComparison.OrdinalIgnoreCase))
                 {
@@ -596,12 +771,10 @@ namespace EditorTools
                     continue;
                 }
 
-                // Must have a current category to add content
                 if (current == null) continue;
 
                 if (inNotes)
                 {
-                    // Append to notes
                     if (!string.IsNullOrWhiteSpace(current.notes))
                         current.notes += "\n" + trimmed;
                     else
@@ -609,7 +782,6 @@ namespace EditorTools
                 }
                 else if (CheckboxPattern.IsMatch(line))
                 {
-                    // Strip the bullet/number prefix
                     string itemText = StripListPrefix(trimmed);
                     if (!string.IsNullOrWhiteSpace(itemText))
                     {
@@ -628,7 +800,6 @@ namespace EditorTools
 
         private static string StripListPrefix(string text)
         {
-            // Remove leading: \- \* - * • or 1. 1) 12. 12) etc, plus trailing whitespace after
             string result = Regex.Replace(text, @"^(\\?[-*•]|\d+[.)])\s*", "").Trim();
             return result;
         }
@@ -685,10 +856,66 @@ namespace EditorTools
             return categories;
         }
 
+        // ── Auto-Save to .txt and .json ──────────────────────────────
+        private void SaveToFiles()
+        {
+            try
+            {
+                // Save as .txt
+                var sb = new StringBuilder();
+                foreach (var cat in _data.categories)
+                {
+                    sb.AppendLine("Category:");
+                    sb.AppendLine($"{cat.name}:");
+                    sb.AppendLine();
+
+                    foreach (var item in cat.items)
+                    {
+                        string prefix = item.completed ? "[x]" : "[ ]";
+                        string priorityTag = item.priority > 0 ? $" (P{item.priority})" : "";
+                        sb.AppendLine($"- {prefix}{priorityTag} {StripCompletedTag(item.text)}");
+                    }
+
+                    sb.AppendLine();
+
+                    if (!string.IsNullOrWhiteSpace(cat.notes))
+                    {
+                        sb.AppendLine("Notes:");
+                        sb.AppendLine(cat.notes);
+                    }
+
+                    sb.AppendLine();
+                }
+
+                File.WriteAllText(SaveTxtPath, sb.ToString());
+
+                // Save as .json (using the import-friendly format)
+                var jsonExport = new JsonImportData();
+                foreach (var cat in _data.categories)
+                {
+                    var jc = new JsonImportCategory
+                    {
+                        name = cat.name,
+                        items = cat.items.Select(i => StripCompletedTag(i.text)).ToList(),
+                        notes = cat.notes ?? ""
+                    };
+                    jsonExport.categories.Add(jc);
+                }
+
+                string json = JsonUtility.ToJson(jsonExport, true);
+                File.WriteAllText(SaveJsonPath, json);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Project Planner] Auto-save to files failed: {e.Message}");
+            }
+        }
+
         // ── Persistence ──────────────────────────────────────────────
         private void Save()
         {
             EditorPrefs.SetString(EditorPrefsKey, JsonUtility.ToJson(_data, false));
+            SaveToFiles();
         }
 
         private void Load()
@@ -702,6 +929,43 @@ namespace EditorTools
             else
             {
                 _data = new NotesData();
+            }
+        }
+    }
+
+    // ── Asset Postprocessor (watches import folders) ──────────────
+    public class ProjectPlannerImportWatcher : AssetPostprocessor
+    {
+        private static void OnPostprocessAllAssets(
+            string[] importedAssets, string[] deletedAssets,
+            string[] movedAssets, string[] movedFromAssetPaths)
+        {
+            bool shouldProcess = false;
+
+            foreach (string asset in importedAssets)
+            {
+                if (asset.Contains("ProjectPlannerImport"))
+                {
+                    string ext = Path.GetExtension(asset).ToLowerInvariant();
+                    if (ext == ".txt" || ext == ".json")
+                    {
+                        shouldProcess = true;
+                        break;
+                    }
+                }
+            }
+
+            if (shouldProcess)
+            {
+                // Delay to ensure file is fully written
+                EditorApplication.delayCall += () =>
+                {
+                    var window = EditorWindow.GetWindow<NotesEditorWindow>("Project Planner", false);
+                    if (window != null)
+                    {
+                        window.ProcessImportFolders();
+                    }
+                };
             }
         }
     }
