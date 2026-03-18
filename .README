@@ -89,7 +89,10 @@ Inside any category, type your task in the text field and click the **+** button
 
 ### Priority System
 
-Each to-do item has a colored **priority box** to the left of its text. Click the box to cycle through priority levels:
+Each to-do item has a colored **priority box** to the left of its text:
+
+- **Left-click** the box to increase priority (0→1→2→3→4→0)
+- **Right-click** the box to decrease priority (0→4→3→2→1→0)
 
 | Priority | Color        | Meaning     |
 |----------|--------------|-------------|
@@ -136,14 +139,16 @@ Use the **▲** and **▼** buttons on each category header to move it one posit
 
 ## Toolbar
 
-| Element                  | Description                                              |
-|--------------------------|----------------------------------------------------------|
-| **Project Planner**      | Window title.                                            |
-| **Total Categories: #**  | Displays the total number of categories.                 |
-| **Search**               | Filter items across all categories by text.              |
-| **Import**               | Open a file picker to manually import a `.txt` or `.json` file. |
-| **Collapse All**         | Folds every category and completed section closed.       |
-| **Expand All**           | Opens every category and completed section.              |
+| Element                            | Description                                              |
+|------------------------------------|----------------------------------------------------------|
+| **Project Planner**                | Window title.                                            |
+| **Total Categories: #**            | Displays the total number of categories.                 |
+| **Total Categories Completed: #**  | Number of categories where every item is completed.      |
+| **Total Tasks Completed: #**       | Sum of all completed tasks across every category.        |
+| **Search**                         | Filter items across all categories by text.              |
+| **Import**                         | Open a file picker to manually import a `.txt` or `.json` file. |
+| **Collapse All**                   | Folds every category and completed section closed.       |
+| **Expand All**                     | Opens every category and completed section.              |
 
 ## Category Header
 
@@ -161,7 +166,7 @@ Use the **▲** and **▼** buttons on each category header to move it one posit
 | Element          | Description                                                              |
 |------------------|--------------------------------------------------------------------------|
 | **Checkbox**     | Toggle to mark the item as completed or restore it.                      |
-| **Priority Box** | Clickable — cycles through 0→1→2→3→4→0 with corresponding colors.       |
+| **Priority Box** | Left-click to increase, right-click to decrease priority (0–4).          |
 | **Text Field**   | The item's text. Click to edit inline.                                   |
 | **✕**            | Delete the item.                                                         |
 | **▲ ▼**          | Move the item up or down within the same priority level.                 |
@@ -230,8 +235,8 @@ Never leave the fire unattended.
 
 - `Category:` must be on its **own line**. The **next non-empty line** after it is the category name (trailing `:` is stripped automatically).
 - To-do items are lines starting with any of these prefixes:
-  - Dashes: `- '
-  - Asterisks: `* `
+  - Dashes: `- ` or `\- `
+  - Asterisks: `* ` or `\* `
   - Bullets: `• `
   - Numbers: `1.` `2.` `3)` `12.` etc.
   - The prefix is stripped — only the item text is kept.
