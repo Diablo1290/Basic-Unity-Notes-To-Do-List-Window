@@ -171,7 +171,13 @@ namespace EditorTools
             GUILayout.Label("Project Planner", _headerStyle);
             GUILayout.FlexibleSpace();
 
-            GUILayout.Label($"Total Categories: {_data.categories.Count}", _headerStyle);
+            int totalCategories = _data.categories.Count;
+            int totalCompleted = _data.categories.Sum(c => c.items.Count(i => i.completed));
+            int totalCategoriesCompleted = _data.categories.Count(c => c.items.Count > 0 && c.items.All(i => i.completed));
+
+            GUILayout.Label($"Total Categories: {totalCategories}", _headerStyle);
+            GUILayout.Label($"Total Categories Completed: {totalCategoriesCompleted}", _headerStyle);
+            GUILayout.Label($"Total Tasks Completed: {totalCompleted}", _headerStyle);
             GUILayout.Label("Search:", EditorStyles.miniLabel, GUILayout.Width(42));
             _searchFilter = EditorGUILayout.TextField(_searchFilter, EditorStyles.toolbarSearchField,
                 GUILayout.Width(140));
@@ -396,12 +402,20 @@ namespace EditorTools
 
             if (!isCompletedSection)
             {
-                if (GUILayout.Button(item.priority.ToString(), EditorStyles.miniButton,
-                        GUILayout.Width(PriorityBoxWidth), GUILayout.Height(16)))
+                Rect priorityRect = GUILayoutUtility.GetRect(PriorityBoxWidth, 16,
+                    GUILayout.Width(PriorityBoxWidth), GUILayout.Height(16));
+                GUI.Box(priorityRect, item.priority.ToString(), EditorStyles.miniButton);
+
+                if (Event.current.type == EventType.MouseDown && priorityRect.Contains(Event.current.mousePosition))
                 {
-                    item.priority = (item.priority + 1) % 5;
+                    if (Event.current.button == 0) // Left-click: increase
+                        item.priority = (item.priority + 1) % 5;
+                    else if (Event.current.button == 1) // Right-click: decrease
+                        item.priority = (item.priority + 4) % 5;
+
                     NormalizeSortOrders(category);
                     Save();
+                    Event.current.Use();
                 }
             }
             else
