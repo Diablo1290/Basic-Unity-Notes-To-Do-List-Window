@@ -1,20 +1,21 @@
-# Notes & To-Do — Unity Editor Window
+# Project Planner — Unity Editor Window
 
-A lightweight, single-script editor tool that adds a notes and to-do list window to Unity. No packages, no assets in your build — just a simple editor extension stored entirely in `EditorPrefs`.
+A lightweight, single-script editor tool that adds a full-featured project planner to Unity. Organize your work with categories, prioritized to-do lists, notes, and file-based import/export — all without adding anything to your game builds.
 
 ---
 
 ## Features
 
-- **Categories** — Create, rename, reorder, and delete groups to organize your work.
-- **To-Do Items** — Add checkbox items to any category. Mark them complete, edit inline, or delete.
+- **Categories** — Create, rename, reorder (▲▼ buttons or ≡ drag handle), and delete groups to organize your work.
+- **To-Do Items** — Add checkbox items to any category. Mark them complete, edit inline, reorder with ▲▼ arrows, or delete.
 - **Priority System** — Each item has a clickable priority box (0–4) with color coding. Items auto-sort by priority within their category.
-- **Completed Section** — Checked-off items move to a collapsible "Completed" section with `*COMPLETED*` appended. Unchecking restores them to the active list with their original priority.
+- **Completed Section** — Checked-off items move to a collapsible "Completed" section with `*COMPLETED*` appended. Unchecking restores them with their original priority.
 - **Notes** — Each category has a freeform text area for general notes.
 - **Search** — Filter items across all categories from the toolbar.
-- **Drag Reorder** — Reorder items within the same priority level using the drag handle (≡).
-- **Import** — Bulk-import categories, items, and notes from `.txt` or `.json` files.
-- **Zero Project Footprint** — Data is stored in `EditorPrefs`. Nothing is added to your project's assets, scenes, or builds.
+- **Import (Manual)** — Bulk-import categories, items, and notes from `.txt` or `.json` files via the Import button.
+- **Import (Auto)** — Drop `.txt` or `.json` files into the watch folders and the planner auto-imports and deletes them.
+- **Auto-Save** — Every change automatically writes `ProjectPlannerSaveText.txt` and `ProjectPlannerSaveJSON.json` alongside the script.
+- **Data Storage** — Primary data is stored in `EditorPrefs` (machine-only). Auto-save files provide a shareable backup.
 
 ---
 
@@ -48,10 +49,31 @@ A lightweight, single-script editor tool that adds a notes and to-do list window
 4. Open the window via the menu bar:
 
    ```
-   Window → General → Notes and To-Do
+   Window → General → Project Planner
    ```
 
 5. Dock it wherever you like — next to the Inspector, Console, or as a floating window.
+
+---
+
+## File Layout
+
+Once the planner runs for the first time, the following files and folders are created automatically:
+
+```
+Assets/Editor/
+├── NotesEditorWindow.cs              ← The script
+├── ProjectPlannerSaveText.txt        ← Auto-save (human-readable)
+├── ProjectPlannerSaveJSON.json       ← Auto-save (JSON format)
+└── ProjectPlannerImport/
+    ├── txt/                          ← Drop .txt files here to auto-import
+    └── json/                         ← Drop .json files here to auto-import
+```
+
+- **ProjectPlannerSaveText.txt** — A human-readable snapshot of all your data. Updates every time you make a change. Includes checkbox state `[x]`/`[ ]`, priority tags, and notes.
+- **ProjectPlannerSaveJSON.json** — The same data in JSON format, compatible with the import system. Updates on every change.
+- **ProjectPlannerImport/txt/** — Drop `.txt` files here. The planner detects them, imports the data, and deletes the file.
+- **ProjectPlannerImport/json/** — Drop `.json` files here. Same auto-import behavior.
 
 ---
 
@@ -63,7 +85,7 @@ Type a name in the **"New Category"** field at the bottom of the window and clic
 
 ### Adding a To-Do Item
 
-Inside any category, type your task in the text field and click the **+** button (or press **Enter** while the field is focused).
+Inside any category, type your task in the text field and click the **+** button (or press **Enter** while the field is focused). New items are added at **priority 0** by default.
 
 ### Priority System
 
@@ -79,26 +101,24 @@ Each to-do item has a colored **priority box** to the left of its text. Click th
 
 Items automatically sort by priority within their category — priority 4 items appear at the top, priority 0 items at the bottom.
 
+### Reordering Items
+
+Each active item has **▲▼** arrows on the right side. These move the item up or down **within the same priority level**. You cannot move an item past items of a different priority — use the priority box to change its level instead.
+
 ### Completing Items
 
-- Click the **checkbox** next to an item to mark it as complete.
-- `*COMPLETED*` is appended to the item's text and it moves to the **Completed** section below the active items.
-- The Completed section is collapsible — click the foldout arrow to show/hide it.
+Click the **checkbox** next to an item to mark it as complete. `*COMPLETED*` is appended to the item's text and it moves to the **Completed** section below the active items. The Completed section is collapsible — click the foldout arrow to show/hide it.
 
 ### Restoring Completed Items
 
 - **Uncheck a single item** — Click its checkbox in the Completed section. The `*COMPLETED*` tag is removed and the item returns to the active list at its original priority.
-- **Clear Completed** — Bulk-unchecks all completed items in that category, restoring them all to the active list.
+- **Clear Completed** — Bulk-unchecks all completed items in that category, restoring them all to the active list with their original priorities.
 - **Delete All** (red button) — Permanently deletes all completed items in that category. A confirmation dialog will appear.
 
 ### Editing Items
 
 - Click the **text field** of any item to edit it inline.
 - Click **✕** to delete a single item.
-
-### Drag Reorder
-
-Each active item has a drag handle (**≡**) on its left side. Click and drag to reorder items within the same priority level.
 
 ### Notes
 
@@ -110,38 +130,71 @@ The **Search** field in the toolbar filters items across all categories. Only ca
 
 ### Reordering Categories
 
-Use the **▲** and **▼** buttons on each category header to move it up or down.
+Use the **▲** and **▼** buttons on each category header to move it one position at a time. Use the **≡** drag handle to click and drag a category to any position in the list.
 
-### Toolbar Actions
+---
 
-| Button            | Action                                              |
-|-------------------|-----------------------------------------------------|
-| **Search**        | Filter items across all categories by text.         |
-| **Import**        | Import categories from a `.txt` or `.json` file.    |
-| **Collapse All**  | Folds every category and completed section closed.  |
-| **Expand All**    | Opens every category and completed section.         |
+## Toolbar
 
-### Category Header
+| Element                  | Description                                              |
+|--------------------------|----------------------------------------------------------|
+| **Project Planner**      | Window title.                                            |
+| **Total Categories: #**  | Displays the total number of categories.                 |
+| **Search**               | Filter items across all categories by text.              |
+| **Import**               | Open a file picker to manually import a `.txt` or `.json` file. |
+| **Collapse All**         | Folds every category and completed section closed.       |
+| **Expand All**           | Opens every category and completed section.              |
 
-| Element        | Description                                                        |
-|----------------|--------------------------------------------------------------------|
-| **Foldout ▶**  | Click to expand or collapse the category.                          |
-| **Name**       | Click to edit the category name inline.                            |
-| **Count**      | Shows `completed/total` items (e.g. `3/7`).                       |
-| **▲ ▼**        | Reorder the category up or down.                                   |
-| **✕**          | Delete the category and all its items (with confirmation dialog).  |
+## Category Header
+
+| Element                      | Description                                                        |
+|------------------------------|--------------------------------------------------------------------|
+| **Foldout ▶**                | Click to expand or collapse the category.                          |
+| **Name**                     | Click to edit the category name inline.                            |
+| **Tasks Completed: #/#**     | Shows completed vs total items (e.g. `Tasks Completed: 3/7`).     |
+| **▲ ▼**                      | Reorder the category up or down one position.                      |
+| **≡**                        | Drag handle — click and drag to move the category to any position. |
+| **✕**                        | Delete the category and all its items (with confirmation dialog).  |
+
+## Item Row
+
+| Element          | Description                                                              |
+|------------------|--------------------------------------------------------------------------|
+| **Checkbox**     | Toggle to mark the item as completed or restore it.                      |
+| **Priority Box** | Clickable — cycles through 0→1→2→3→4→0 with corresponding colors.       |
+| **Text Field**   | The item's text. Click to edit inline.                                   |
+| **✕**            | Delete the item.                                                         |
+| **▲ ▼**          | Move the item up or down within the same priority level.                 |
 
 ---
 
 ## Importing Data
 
-Click the **Import** button in the toolbar to import categories, to-do items, and notes from a `.txt` or `.json` file. All imported items are set to **priority 0** by default.
+There are two ways to import data into the Project Planner.
+
+### Manual Import (Import Button)
+
+Click the **Import** button in the toolbar. A file picker opens — select a `.txt` or `.json` file. The data is imported and merged with your existing categories.
+
+### Auto-Import (Watch Folders)
+
+Drop files directly into the import folders inside your project:
+
+- `.txt` files → `Assets/Editor/ProjectPlannerImport/txt/`
+- `.json` files → `Assets/Editor/ProjectPlannerImport/json/`
+
+The planner detects new files automatically when Unity reimports assets. On detection:
+
+1. The file is validated for correct format.
+2. If valid, the data is merged into the planner and the file is deleted.
+3. If invalid, an error dialog appears listing which files failed and why. The files are left in place so you can fix them.
 
 ### Merge Behavior
 
 - If an imported category has the **same name** (case-insensitive) as an existing category, the items are **appended** to the existing category and notes are concatenated.
 - If the category name is **different**, a new category is created.
 - Duplicate item text is **not** filtered — if the file contains the same item twice, both will be added.
+- All imported items are set to **priority 0** by default.
 
 ### TXT Format
 
@@ -224,22 +277,38 @@ JSON files must follow this structure:
 
 ---
 
+## Auto-Save
+
+Every change you make in the planner automatically writes two files alongside the script:
+
+- **`ProjectPlannerSaveText.txt`** — Human-readable format. Each item shows `[x]` or `[ ]` for completion status, a priority tag like `(P3)` if priority is above 0, and the item text.
+- **`ProjectPlannerSaveJSON.json`** — JSON format matching the import structure. Can be used as a backup or shared with others who can import it.
+
+These files update on every action (adding, editing, completing, deleting, reordering). They are written to the same folder as the script.
+
+---
+
 ## Data Storage
 
-All data is stored in **`EditorPrefs`** under the key `EditorTools_NotesData`.
+Primary data is stored in **`EditorPrefs`** under the key `EditorTools_NotesData`.
 
 **What this means:**
 
-- Notes persist between Unity sessions on the **same machine**.
-- Notes are **not** shared via version control or across machines.
-- Notes are **not** included in builds.
-- Uninstalling the script does not automatically delete saved data. To clear it manually, use `EditorPrefs.DeleteKey("EditorTools_NotesData")` in a console or script.
+- Data persists between Unity sessions on the **same machine**.
+- Data is **not** shared via version control or across machines (use the auto-save files or export for that).
+- Data is **not** included in builds.
+- Uninstalling the script does not automatically delete saved data from EditorPrefs. To clear it manually, use `EditorPrefs.DeleteKey("EditorTools_NotesData")` in a console or script.
 
 ---
 
 ## Uninstalling
 
-1. Delete `Assets/Editor/NotesEditorWindow.cs` from your project.
+1. Delete the following from your project:
+   - `Assets/Editor/NotesEditorWindow.cs`
+   - `Assets/Editor/ProjectPlannerSaveText.txt`
+   - `Assets/Editor/ProjectPlannerSaveJSON.json`
+   - `Assets/Editor/ProjectPlannerImport/` (entire folder)
+
 2. *(Optional)* Clear stored data by running this in a Unity editor script or the Immediate window:
    ```csharp
    EditorPrefs.DeleteKey("EditorTools_NotesData");
