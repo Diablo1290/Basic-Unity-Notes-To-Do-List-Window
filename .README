@@ -8,9 +8,13 @@ A lightweight, single-script editor tool that adds a notes and to-do list window
 
 - **Categories** — Create, rename, reorder, and delete groups to organize your work.
 - **To-Do Items** — Add checkbox items to any category. Mark them complete, edit inline, or delete.
+- **Priority System** — Each item has a clickable priority box (0–4) with color coding. Items auto-sort by priority within their category.
+- **Completed Section** — Checked-off items move to a collapsible "Completed" section with `*COMPLETED*` appended. Unchecking restores them to the active list with their original priority.
 - **Notes** — Each category has a freeform text area for general notes.
-- **Toolbar** — Collapse/expand all categories and bulk-clear completed items.
-- **Zero Project Footprint** — Data is stored in `EditorPrefs` (your machine's registry/plist). Nothing is added to your project's assets, scenes, or builds.
+- **Search** — Filter items across all categories from the toolbar.
+- **Drag Reorder** — Reorder items within the same priority level using the drag handle (≡).
+- **Import** — Bulk-import categories, items, and notes from `.txt` or `.json` files.
+- **Zero Project Footprint** — Data is stored in `EditorPrefs`. Nothing is added to your project's assets, scenes, or builds.
 
 ---
 
@@ -59,29 +63,164 @@ Type a name in the **"New Category"** field at the bottom of the window and clic
 
 ### Adding a To-Do Item
 
-Inside any category, type your task in the text field and click the **+** button.
+Inside any category, type your task in the text field and click the **+** button (or press **Enter** while the field is focused).
 
-### Completing / Editing Items
+### Priority System
 
-- Click the **checkbox** to mark an item as complete. Completed items are greyed out.
-- Click the **text** of any item to edit it inline.
+Each to-do item has a colored **priority box** to the left of its text. Click the box to cycle through priority levels:
+
+| Priority | Color        | Meaning     |
+|----------|--------------|-------------|
+| **0**    | Grey         | Default     |
+| **1**    | Light Blue   | Low         |
+| **2**    | Light Green  | Medium      |
+| **3**    | Yellow       | High        |
+| **4**    | Red          | Highest     |
+
+Items automatically sort by priority within their category — priority 4 items appear at the top, priority 0 items at the bottom.
+
+### Completing Items
+
+- Click the **checkbox** next to an item to mark it as complete.
+- `*COMPLETED*` is appended to the item's text and it moves to the **Completed** section below the active items.
+- The Completed section is collapsible — click the foldout arrow to show/hide it.
+
+### Restoring Completed Items
+
+- **Uncheck a single item** — Click its checkbox in the Completed section. The `*COMPLETED*` tag is removed and the item returns to the active list at its original priority.
+- **Clear Completed** — Bulk-unchecks all completed items in that category, restoring them all to the active list.
+- **Delete All** (red button) — Permanently deletes all completed items in that category. A confirmation dialog will appear.
+
+### Editing Items
+
+- Click the **text field** of any item to edit it inline.
 - Click **✕** to delete a single item.
+
+### Drag Reorder
+
+Each active item has a drag handle (**≡**) on its left side. Click and drag to reorder items within the same priority level.
 
 ### Notes
 
-Each category has a **Notes** text area at the bottom of its section. Use it for freeform text — context, links, reminders, etc.
+Each category has a **Notes** text area below the Completed section. Use it for freeform text — context, links, reminders, etc.
 
-### Toolbar Actions
+### Search
 
-| Button              | Action                                               |
-|---------------------|------------------------------------------------------|
-| **Collapse All**    | Folds every category closed.                         |
-| **Expand All**      | Opens every category.                                |
-| **Clear Completed** | Removes all completed items across every category.   |
+The **Search** field in the toolbar filters items across all categories. Only categories and items matching the search text are shown. Clear the field to show everything again.
 
 ### Reordering Categories
 
 Use the **▲** and **▼** buttons on each category header to move it up or down.
+
+### Toolbar Actions
+
+| Button            | Action                                              |
+|-------------------|-----------------------------------------------------|
+| **Search**        | Filter items across all categories by text.         |
+| **Import**        | Import categories from a `.txt` or `.json` file.    |
+| **Collapse All**  | Folds every category and completed section closed.  |
+| **Expand All**    | Opens every category and completed section.         |
+
+### Category Header
+
+| Element        | Description                                                        |
+|----------------|--------------------------------------------------------------------|
+| **Foldout ▶**  | Click to expand or collapse the category.                          |
+| **Name**       | Click to edit the category name inline.                            |
+| **Count**      | Shows `completed/total` items (e.g. `3/7`).                       |
+| **▲ ▼**        | Reorder the category up or down.                                   |
+| **✕**          | Delete the category and all its items (with confirmation dialog).  |
+
+---
+
+## Importing Data
+
+Click the **Import** button in the toolbar to import categories, to-do items, and notes from a `.txt` or `.json` file. All imported items are set to **priority 0** by default.
+
+### Merge Behavior
+
+- If an imported category has the **same name** (case-insensitive) as an existing category, the items are **appended** to the existing category and notes are concatenated.
+- If the category name is **different**, a new category is created.
+- Duplicate item text is **not** filtered — if the file contains the same item twice, both will be added.
+
+### TXT Format
+
+Text files must follow this structure:
+
+```
+Category:
+Jump Starting Vehicle:
+
+- Grab jumper cables
+- Pop the hood
+- Connect red cable to positive terminal
+* Connect black cable to ground
+1. Start the working vehicle
+2. Start the dead vehicle
+
+Notes:
+Wait 5 minutes before attempting to start.
+Make sure both vehicles are in park.
+
+Category:
+Starting a Campfire:
+
+- Gather dry wood
+* Clear the fire pit area
+1. Arrange kindling in a teepee shape
+
+Notes:
+Never leave the fire unattended.
+```
+
+**Rules:**
+
+- `Category:` must be on its **own line**. The **next non-empty line** after it is the category name (trailing `:` is stripped automatically).
+- To-do items are lines starting with any of these prefixes:
+  - Dashes: `- ` or `\- `
+  - Asterisks: `* ` or `\* `
+  - Bullets: `• `
+  - Numbers: `1.` `2.` `3)` `12.` etc.
+  - The prefix is stripped — only the item text is kept.
+- `Notes:` must be on its **own line**. All lines after it are treated as notes until the next `Category:` line.
+- Empty lines are ignored.
+- Lines before the first `Category:` are ignored.
+
+### JSON Format
+
+JSON files must follow this structure:
+
+```json
+{
+  "categories": [
+    {
+      "name": "Jump Starting Vehicle",
+      "items": [
+        "Grab jumper cables",
+        "Pop the hood",
+        "Connect red cable to positive terminal"
+      ],
+      "notes": "Wait 5 minutes before attempting to start."
+    },
+    {
+      "name": "Starting a Campfire",
+      "items": [
+        "Gather dry wood",
+        "Clear the fire pit area",
+        "Arrange kindling in a teepee shape"
+      ],
+      "notes": "Never leave the fire unattended."
+    }
+  ]
+}
+```
+
+**Rules:**
+
+- `categories` is an array of objects.
+- Each object must have a `name` (string).
+- `items` is an array of strings — each string becomes a to-do checkbox item.
+- `notes` is a string — becomes the category's notes area content.
 
 ---
 
