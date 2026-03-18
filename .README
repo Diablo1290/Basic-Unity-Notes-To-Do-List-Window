@@ -230,8 +230,8 @@ Never leave the fire unattended.
 
 - `Category:` must be on its **own line**. The **next non-empty line** after it is the category name (trailing `:` is stripped automatically).
 - To-do items are lines starting with any of these prefixes:
-  - Dashes: `- ` or `\- `
-  - Asterisks: `* ` or `\* `
+  - Dashes: `- '
+  - Asterisks: `* `
   - Bullets: `• `
   - Numbers: `1.` `2.` `3)` `12.` etc.
   - The prefix is stripped — only the item text is kept.
