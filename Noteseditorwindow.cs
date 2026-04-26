@@ -221,10 +221,9 @@ namespace EditorTools
 
             cat.foldout = EditorGUILayout.Foldout(cat.foldout, "", true);
 
-            string newName = EditorGUILayout.TextField(cat.name, _headerStyle);
+            string newName = EditorGUILayout.TextField(cat.name, _headerStyle, GUILayout.ExpandWidth(true));
             if (newName != cat.name) { cat.name = newName; Save(); }
 
-            GUILayout.FlexibleSpace();
 
             GUILayout.Label($"Tasks Completed: {completedItems.Count}/{cat.items.Count}", _headerStyle);
 
